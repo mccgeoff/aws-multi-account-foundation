@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Transit Gateway Demo - Two VPCs with EC2 and RDS instances'
+
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair for SSH access
+  
+Resources:
+  # Transit Gateway
+  TransitGateway:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      AmazonSideAsn: 64512
+      Description: Demo Transit Gateway
+      Tags:
+        - Key: Name
+          Value: Demo-TGW
+
+  # VPC A (10.0.0.0/16)
+  VPCA:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: VPC-A
+
+  # VPC A Subnets
+  VPCAAppSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCA
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-A-App-Subnet
+
+  VPCADBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCA
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-A-DB-Subnet
+
+  VPCATGWSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCA
+      CidrBlock: 10.0.255.0/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-A-TGW-Subnet
+
+  # VPC B (10.1.0.0/16)
+  VPCB:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: VPC-B
+
+  # VPC B Subnets
+  VPCBAppSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCB
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-B-App-Subnet
+
+  VPCBDBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCB
+      CidrBlock: 10.1.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-B-DB-Subnet
+
+  VPCBTGWSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCB
+      CidrBlock: 10.1.255.0/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: VPC-B-TGW-Subnet
+
+  # TGW Attachments
+  TGWAttachmentA:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      VpcId: !Ref VPCA
+      SubnetIds:
+        - !Ref VPCATGWSubnet
+      Tags:
+        - Key: Name
+          Value: TGW-Attachment-VPC-A
+
+  TGWAttachmentB:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      VpcId: !Ref VPCB
+      SubnetIds:
+        - !Ref VPCBTGWSubnet
+      Tags:
+        - Key: Name
+          Value: TGW-Attachment-VPC-B
+
+  # Route Tables
+  VPCARouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCA
+      Tags:
+        - Key: Name
+          Value: VPC-A-RouteTable
+
+  VPCBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCB
+      Tags:
+        - Key: Name
+          Value: VPC-B-RouteTable
+
+  # Routes to TGW
+  VPCAToTGWRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TGWAttachmentA
+    Properties:
+      RouteTableId: !Ref VPCARouteTable
+      DestinationCidrBlock: 10.1.0.0/16
+      TransitGatewayId: !Ref TransitGateway
+
+  VPCBToTGWRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TGWAttachmentB
+    Properties:
+      RouteTableId: !Ref VPCBRouteTable
+      DestinationCidrBlock: 10.0.0.0/16
+      TransitGatewayId: !Ref TransitGateway
+
+  # Associate Route Tables
+  VPCAAppSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VPCAAppSubnet
+      RouteTableId: !Ref VPCARouteTable
+
+  VPCBAppSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VPCBAppSubnet
+      RouteTableId: !Ref VPCBRouteTable
+
+  # Security Groups
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and ping between VPCs
+      VpcId: !Ref VPCA
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+
+  EC2SecurityGroupB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH and ping between VPCs
+      VpcId: !Ref VPCB
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/8
+
+  # EC2 Instances
+  EC2InstanceA:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c02fb55956c7d316  # Amazon Linux 2 (update for your region)
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref VPCAAppSubnet
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      PrivateIpAddress: 10.0.1.10
+      Tags:
+        - Key: Name
+          Value: EC2-Instance-VPC-A
+
+  EC2InstanceB:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c02fb55956c7d316  # Amazon Linux 2 (update for your region)
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref VPCBAppSubnet
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroupB
+      PrivateIpAddress: 10.1.1.10
+      Tags:
+        - Key: Name
+          Value: EC2-Instance-VPC-B
+
+Outputs:
+  TransitGatewayId:
+    Description: Transit Gateway ID
+    Value: !Ref TransitGateway
+  
+  VPCAId:
+    Description: VPC A ID
+    Value: !Ref VPCA
+    
+  VPCBId:
+    Description: VPC B ID
+    Value: !Ref VPCB
+    
+  EC2InstanceAIP:
+    Description: EC2 Instance A Private IP
+    Value: !GetAtt EC2InstanceA.PrivateIp
+    
+  EC2InstanceBIP:
+    Description: EC2 Instance B Private IP
+    Value: !GetAtt EC2InstanceB.PrivateIp
