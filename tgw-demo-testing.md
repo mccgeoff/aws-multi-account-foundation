@@ -1,9 +1,39 @@
-# Transit gateway architecture simplified for learning
+# Transit Gateway Demo Testing Guide
 
-![Transit Gateway Architecture](tgw3.drawio.png)
+This guide shows how to test the Transit Gateway connectivity created by the `tgw-cf.yaml` CloudFormation template.
 
-**Diagram:** tgw-arch.png  
-**CloudFormation:** tgw-cf.yaml
+## Cost Information
+
+### VPC Reachability Analyzer
+- **$0.10 per analysis**
+- One-time charge each time you run "Create and analyze path"
+- No ongoing costs
+
+### CloudFormation Template Resources
+| Resource | Cost | Notes |
+|----------|------|-------|
+| Transit Gateway Attachments | ~$0.05/hour × 2 = $72/month | Always charged when attached |
+| Data Processing | $0.02/GB | Only when traffic flows through TGW |
+| EC2 t3.micro instances | ~$8/month each | Free tier eligible |
+| VPCs, Subnets, Route Tables | $0 | No charge |
+
+### Demo Cost Optimization
+**For Testing:**
+- Deploy → Test → Delete same day = ~$0.25 total
+- Reachability Analyzer tests = $0.10 each
+
+**For Persistent Demo:**
+- ~$88/month if left running continuously
+- Most cost comes from TGW attachments (always charged)
+
+### Recommendation
+**Deploy → Test → Delete** for demos:
+- Template deploys in ~5 minutes
+- Testing takes 2 minutes  
+- Cleanup is instant
+- **Total demo cost: Under $1** for a few hours
+
+![Transit Gateway Architecture](tgw-arch.png)
 
 When the EC2 instance in VPC-A needs to communicate with the EC2 instance in VPC-B, traffic flows through the TGW attachments and Transit Gateway.
 
@@ -71,43 +101,14 @@ Destination: EC2-Instance-VPC-B (10.1.1.10)
 - **TGW Route Tables:** Not propagating routes
 - **NACLs:** Blocking traffic (if modified from defaults)
 
-## Cost Information
-
-### VPC Reachability Analyzer
-- **$0.10 per analysis**
-- One-time charge each time you run "Create and analyze path"
-- No ongoing costs
-
-### CloudFormation Template Resources
-| Resource | Cost | Notes |
-|----------|------|-------|
-| Transit Gateway Attachments | ~$0.05/hour × 2 = $72/month | Always charged when attached |
-| Data Processing | $0.02/GB | Only when traffic flows through TGW |
-| EC2 t3.micro instances | ~$8/month each | Free tier eligible |
-| VPCs, Subnets, Route Tables | $0 | No charge |
-
-### Demo Cost Optimization
-**For Testing:**
-- Deploy → Test → Delete same day = ~$0.25 total
-- Reachability Analyzer tests = $0.10 each
-
-**For Persistent Demo:**
-- ~$88/month if left running continuously
-- Most cost comes from TGW attachments (always charged)
-
-### Recommendation
-**Deploy → Test → Delete** for demos:
-- Template deploys in ~5 minutes
-- Testing takes 2 minutes  
-- Cleanup is instant
-- **Total demo cost: Under $1** for a few hours
-
 ## Cleanup
 
 To avoid ongoing charges:
 ```bash
 aws cloudformation delete-stack --stack-name tgw-demo
 ```
+
+**Note:** TGW attachments are charged hourly, so delete promptly after testing to minimize costs.
 
 **Note:** TGW attachments are charged hourly, so delete promptly after testing to minimize costs.
 
