@@ -10,6 +10,13 @@ Two VPCs connected via Transit Gateway. EC2 instances can communicate across VPC
 
 **Requirements:** This template creates 2 VPCs - ensure you have VPC quota availability in your AWS account.
 
+## Cost Warning
+
+- **Transit Gateway Attachments:** ~$72/month if left running
+- **Demo Cost:** Deploy → Test → Delete same day = ~$0.25 total
+- **VPC Reachability Analyzer:** $0.10 per test
+- **Delete immediately:** Total cost under $1 for quick demo
+
 ## Prerequisites
 
 - AWS CLI configured with appropriate permissions
@@ -35,13 +42,6 @@ Wait for deployment to complete (~5 minutes):
 ```bash
 aws cloudformation describe-stacks --stack-name tgw-demo-stack --query 'Stacks[0].StackStatus'
 ```
-
-## Cost Warning
-
-- **Transit Gateway Attachments:** ~$72/month if left running
-- **Demo Cost:** Deploy → Test → Delete same day = ~$0.25 total
-- **VPC Reachability Analyzer:** $0.10 per test
-- **Delete immediately:** Total cost under $1 for quick demo
 
 ## Testing with VPC Reachability Analyzer
 
