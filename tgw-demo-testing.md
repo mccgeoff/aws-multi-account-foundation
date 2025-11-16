@@ -8,6 +8,34 @@ This guide shows how to test the Transit Gateway connectivity created by the `tg
 
 Two VPCs connected via Transit Gateway. EC2 instances can communicate across VPCs through TGW attachments.
 
+**Requirements:** This template creates 2 VPCs - ensure you have VPC quota availability in your AWS account.
+
+## Prerequisites
+
+- AWS CLI configured with appropriate permissions
+- EC2 key pair (create one if needed):
+
+```
+aws ec2 create-key-pair --key-name tgw-demo-key
+```
+
+## Deployment
+
+Deploy the CloudFormation template:
+
+```
+aws cloudformation create-stack \
+  --stack-name tgw-demo-stack \
+  --template-body file://tgw-cf.yaml \
+  --parameters ParameterKey=KeyPairName,ParameterValue=tgw-demo-key \
+  --capabilities CAPABILITY_IAM
+```
+
+Wait for deployment to complete (~5 minutes):
+```bash
+aws cloudformation describe-stacks --stack-name tgw-demo-stack --query 'Stacks[0].StackStatus'
+```
+
 ## Cost Warning
 
 - **Transit Gateway Attachments:** ~$72/month if left running
