@@ -1,0 +1,381 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Multi-Account Transit Gateway Demo - Simulates cross-account connectivity patterns'
+
+# MULTI-ACCOUNT ARCHITECTURE SIMULATION
+# In production, this would be deployed across 4 accounts:
+# - Management Account: AWS Organizations, billing, governance (no workload resources)
+# - Infrastructure Account: Transit Gateway, shared networking services
+# - Production Account: VPC-Prod (10.0.0.0/16) with production workloads
+# - Dev/Test Account: VPC-Dev (10.1.0.0/16) with development/testing workloads
+
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair for SSH access
+  
+  Environment:
+    Type: String
+    Default: 'multi-account-demo'
+    Description: Environment tag for all resources
+    
+Resources:
+  # INFRASTRUCTURE ACCOUNT RESOURCES
+  # In production: Deploy in dedicated Infrastructure Account
+  # Purpose: Centralized networking, shared services, DNS
+  
+  TransitGateway:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      AmazonSideAsn: 64512
+      Description: 'Multi-Account Transit Gateway - Infrastructure Account'
+      Tags:
+        - Key: Name
+          Value: MultiAccount-TGW
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Account-Role
+          Value: Infrastructure
+        - Key: Purpose
+          Value: Cross-account-connectivity
+
+  # PRODUCTION ACCOUNT RESOURCES  
+  # In production: Deploy in dedicated Production Account
+  # Purpose: Live workloads, customer-facing applications, strict change control
+  
+  VPCProduction:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16  # Production CIDR block
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: VPC-Production
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Account-Role
+          Value: Production
+        - Key: Data-Classification
+          Value: Production
+        - Key: Backup-Required
+          Value: 'true'
+
+  # Production Subnets - Multi-AZ for high availability
+  ProdAppSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCProduction
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: Production-App-Subnet
+        - Key: Account-Role
+          Value: Production
+        - Key: Tier
+          Value: Application
+
+  ProdDBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCProduction
+      CidrBlock: 10.0.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: Production-DB-Subnet
+        - Key: Account-Role
+          Value: Production
+        - Key: Tier
+          Value: Database
+
+  ProdTGWSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCProduction
+      CidrBlock: 10.0.255.0/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: Production-TGW-Subnet
+        - Key: Account-Role
+          Value: Production
+        - Key: Purpose
+          Value: Transit-Gateway-Attachment
+
+  # DEV/TEST ACCOUNT RESOURCES
+  # In production: Deploy in dedicated Dev/Test Account  
+  # Purpose: Development, testing, staging, experimentation
+  
+  VPCDevTest:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.1.0.0/16  # Dev/Test CIDR block
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: VPC-DevTest
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Data-Classification
+          Value: Non-Production
+        - Key: Auto-Shutdown
+          Value: 'true'
+
+  # Dev/Test Subnets - Cost-optimized, single AZ acceptable
+  DevTestAppSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCDevTest
+      CidrBlock: 10.1.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: DevTest-App-Subnet
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Tier
+          Value: Application
+
+  DevTestDBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCDevTest
+      CidrBlock: 10.1.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: DevTest-DB-Subnet
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Tier
+          Value: Database
+
+  DevTestTGWSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCDevTest
+      CidrBlock: 10.1.255.0/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: DevTest-TGW-Subnet
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Purpose
+          Value: Transit-Gateway-Attachment
+
+  # CROSS-ACCOUNT CONNECTIVITY
+  # In production: These would be cross-account attachments using RAM sharing
+  # The Infrastructure Account would share the TGW via Resource Access Manager
+  # Production and Dev/Test accounts would create attachments to the shared TGW
+  
+  TGWAttachmentProduction:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      VpcId: !Ref VPCProduction
+      SubnetIds:
+        - !Ref ProdTGWSubnet
+      Tags:
+        - Key: Name
+          Value: TGW-Attachment-Production
+        - Key: Account-Role
+          Value: Production
+        - Key: Cross-Account
+          Value: 'true'
+
+  TGWAttachmentDevTest:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      VpcId: !Ref VPCDevTest
+      SubnetIds:
+        - !Ref DevTestTGWSubnet
+      Tags:
+        - Key: Name
+          Value: TGW-Attachment-DevTest
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Cross-Account
+          Value: 'true'
+
+  # ROUTING CONFIGURATION
+  # In production: Route tables would be managed within each account
+  # with routes pointing to the shared Transit Gateway
+  
+  ProductionRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCProduction
+      Tags:
+        - Key: Name
+          Value: Production-RouteTable
+        - Key: Account-Role
+          Value: Production
+
+  DevTestRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCDevTest
+      Tags:
+        - Key: Name
+          Value: DevTest-RouteTable
+        - Key: Account-Role
+          Value: DevTest
+
+  # Cross-account routes (in production, these would route to shared TGW)
+  ProductionToDevTestRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TGWAttachmentProduction
+    Properties:
+      RouteTableId: !Ref ProductionRouteTable
+      DestinationCidrBlock: 10.1.0.0/16  # Route to Dev/Test account CIDR
+      TransitGatewayId: !Ref TransitGateway
+
+  DevTestToProductionRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TGWAttachmentDevTest
+    Properties:
+      RouteTableId: !Ref DevTestRouteTable
+      DestinationCidrBlock: 10.0.0.0/16  # Route to Production account CIDR
+      TransitGatewayId: !Ref TransitGateway
+
+  # Associate subnets with route tables
+  ProdAppSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref ProdAppSubnet
+      RouteTableId: !Ref ProductionRouteTable
+
+  DevTestAppSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DevTestAppSubnet
+      RouteTableId: !Ref DevTestRouteTable
+
+  # SECURITY GROUPS
+  # In production: Different security postures per account
+  
+  ProductionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Production Security Group - Restrictive access'
+      VpcId: !Ref VPCProduction
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.1.0.0/16  # Only allow SSH from Dev/Test account
+          Description: 'SSH from Dev/Test account for troubleshooting'
+      Tags:
+        - Key: Name
+          Value: Production-SecurityGroup
+        - Key: Account-Role
+          Value: Production
+        - Key: Security-Level
+          Value: Restrictive
+
+  DevTestSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Dev/Test Security Group - More permissive for development'
+      VpcId: !Ref VPCDevTest
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8  # More permissive for development
+          Description: 'SSH access for development and testing'
+      Tags:
+        - Key: Name
+          Value: DevTest-SecurityGroup
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Security-Level
+          Value: Development
+
+  # TEST INSTANCES
+  # In production: These would be in their respective accounts
+  
+  ProductionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a627a85fdcfabbaa  # Amazon Linux 2023
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref ProdAppSubnet
+      SecurityGroupIds:
+        - !Ref ProductionSecurityGroup
+      PrivateIpAddress: 10.0.1.10
+      Tags:
+        - Key: Name
+          Value: Production-Test-Instance
+        - Key: Account-Role
+          Value: Production
+        - Key: Environment
+          Value: Production
+        - Key: Backup-Required
+          Value: 'true'
+        - Key: Monitoring-Level
+          Value: Enhanced
+
+  DevTestInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a627a85fdcfabbaa  # Amazon Linux 2023
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      SubnetId: !Ref DevTestAppSubnet
+      SecurityGroupIds:
+        - !Ref DevTestSecurityGroup
+      PrivateIpAddress: 10.1.1.10
+      Tags:
+        - Key: Name
+          Value: DevTest-Instance
+        - Key: Account-Role
+          Value: DevTest
+        - Key: Environment
+          Value: Development
+        - Key: Auto-Shutdown
+          Value: 'true'
+        - Key: Cost-Center
+          Value: Development
+
+Outputs:
+  # Infrastructure Account Outputs
+  TransitGatewayId:
+    Description: 'Transit Gateway ID (Infrastructure Account)'
+    Value: !Ref TransitGateway
+    Export:
+      Name: !Sub '${AWS::StackName}-TGW-ID'
+  
+  # Production Account Outputs
+  ProductionVPCId:
+    Description: 'Production VPC ID'
+    Value: !Ref VPCProduction
+    Export:
+      Name: !Sub '${AWS::StackName}-Prod-VPC-ID'
+    
+  ProductionInstanceIP:
+    Description: 'Production Instance Private IP'
+    Value: !GetAtt ProductionInstance.PrivateIp
+    
+  # Dev/Test Account Outputs  
+  DevTestVPCId:
+    Description: 'Dev/Test VPC ID'
+    Value: !Ref VPCDevTest
+    Export:
+      Name: !Sub '${AWS::StackName}-DevTest-VPC-ID'
+    
+  DevTestInstanceIP:
+    Description: 'Dev/Test Instance Private IP'
+    Value: !GetAtt DevTestInstance.PrivateIp
+
+  # Multi-Account Architecture Summary
+  ArchitectureNotes:
+    Description: 'Multi-Account Architecture Implementation Notes'
+    Value: 'This template simulates a 4-account architecture: Management (billing/governance), Infrastructure (TGW/shared services), Production (10.0.0.0/16), and Dev/Test (10.1.0.0/16). In production, deploy across separate accounts using RAM sharing for TGW.'
