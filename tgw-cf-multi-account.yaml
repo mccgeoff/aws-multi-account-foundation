@@ -2,11 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Multi-Account Transit Gateway Demo - Simulates cross-account connectivity patterns'
 
 # MULTI-ACCOUNT ARCHITECTURE SIMULATION
-# In production, this would be deployed across 4 accounts:
-# - Management Account: AWS Organizations, billing, governance (no workload resources)
-# - Infrastructure Account: Transit Gateway, shared networking services
-# - Production Account: VPC-Prod (10.0.0.0/16) with production workloads
-# - Dev/Test Account: VPC-Dev (10.1.0.0/16) with development/testing workloads
+# In production, this would be deployed across 3 accounts:
+# - Management Account: AWS Organizations, billing, Transit Gateway (shared via RAM)
+# - Workload Account A: VPC-A (10.0.0.0/16) with application workloads
+# - Workload Account B: VPC-B (10.1.0.0/16) with application workloads
 
 Parameters:
   KeyPairName:
@@ -17,48 +16,81 @@ Parameters:
     Type: String
     Default: 'multi-account-demo'
     Description: Environment tag for all resources
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: Latest Amazon Linux 2023 AMI ID
     
 Resources:
-  # INFRASTRUCTURE ACCOUNT RESOURCES
-  # In production: Deploy in dedicated Infrastructure Account
-  # Purpose: Centralized networking, shared services, DNS
+  # MANAGEMENT ACCOUNT RESOURCES
+  # In production: Deploy in Management Account
+  # Purpose: AWS Organizations, billing, shared Transit Gateway
   
   TransitGateway:
     Type: AWS::EC2::TransitGateway
     Properties:
       AmazonSideAsn: 64512
-      Description: 'Multi-Account Transit Gateway - Infrastructure Account'
+      Description: 'Multi-Account Transit Gateway - Management Account'
       Tags:
         - Key: Name
           Value: MultiAccount-TGW
         - Key: Environment
           Value: !Ref Environment
         - Key: Account-Role
-          Value: Infrastructure
+          Value: Management
         - Key: Purpose
           Value: Cross-account-connectivity
 
-  # PRODUCTION ACCOUNT RESOURCES  
-  # In production: Deploy in dedicated Production Account
-  # Purpose: Live workloads, customer-facing applications, strict change control
+  # RAM Resource Share - In production, this shares TGW to workload accounts
+  TGWResourceShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      Name: 'TGW-Cross-Account-Share'
+      ResourceArns:
+        - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:transit-gateway/${TransitGateway}'
+      # In production, add target account IDs here:
+      # Principals:
+      #   - '222222222222'  # Workload Account A
+      #   - '333333333333'  # Workload Account B
+      Tags:
+        - Key: Name
+          Value: TGW-RAM-Share
+        - Key: Account-Role
+          Value: Management
+        - Key: Purpose
+          Value: Cross-account-TGW-sharing
+
+  # TGW Route Table for cross-account routing
+  TGWRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      Tags:
+        - Key: Name
+          Value: TGW-RouteTable
+        - Key: Account-Role
+          Value: Management
+
+  # WORKLOAD ACCOUNT A RESOURCES  
+  # In production: Deploy in dedicated Workload Account A
+  # Purpose: Application workloads, databases, compute resources
   
   VPCProduction:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16  # Production CIDR block
+      CidrBlock: 10.0.0.0/16  # Workload A CIDR block
       EnableDnsHostnames: true
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: VPC-Production
+          Value: VPC-Workload-A
         - Key: Environment
           Value: !Ref Environment
         - Key: Account-Role
-          Value: Production
+          Value: Workload-A
         - Key: Data-Classification
-          Value: Production
-        - Key: Backup-Required
-          Value: 'true'
+          Value: Application-Data
 
   # Production Subnets - Multi-AZ for high availability
   ProdAppSubnet:
@@ -103,27 +135,25 @@ Resources:
         - Key: Purpose
           Value: Transit-Gateway-Attachment
 
-  # DEV/TEST ACCOUNT RESOURCES
-  # In production: Deploy in dedicated Dev/Test Account  
-  # Purpose: Development, testing, staging, experimentation
+  # WORKLOAD ACCOUNT B RESOURCES
+  # In production: Deploy in dedicated Workload Account B  
+  # Purpose: Application workloads, databases, compute resources
   
   VPCDevTest:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.1.0.0/16  # Dev/Test CIDR block
+      CidrBlock: 10.1.0.0/16  # Workload B CIDR block
       EnableDnsHostnames: true
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: VPC-DevTest
+          Value: VPC-Workload-B
         - Key: Environment
           Value: !Ref Environment
         - Key: Account-Role
-          Value: DevTest
+          Value: Workload-B
         - Key: Data-Classification
-          Value: Non-Production
-        - Key: Auto-Shutdown
-          Value: 'true'
+          Value: Application-Data
 
   # Dev/Test Subnets - Cost-optimized, single AZ acceptable
   DevTestAppSubnet:
@@ -182,9 +212,9 @@ Resources:
         - !Ref ProdTGWSubnet
       Tags:
         - Key: Name
-          Value: TGW-Attachment-Production
+          Value: TGW-Attachment-Workload-A
         - Key: Account-Role
-          Value: Production
+          Value: Workload-A
         - Key: Cross-Account
           Value: 'true'
 
@@ -197,11 +227,37 @@ Resources:
         - !Ref DevTestTGWSubnet
       Tags:
         - Key: Name
-          Value: TGW-Attachment-DevTest
+          Value: TGW-Attachment-Workload-B
         - Key: Account-Role
-          Value: DevTest
+          Value: Workload-B
         - Key: Cross-Account
           Value: 'true'
+
+  # Associate attachments with TGW route table
+  TGWRouteTableAssociationA:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TGWAttachmentProduction
+      TransitGatewayRouteTableId: !Ref TGWRouteTable
+
+  TGWRouteTableAssociationB:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TGWAttachmentDevTest
+      TransitGatewayRouteTableId: !Ref TGWRouteTable
+
+  # Propagate routes for cross-account connectivity
+  TGWRouteTablePropagationA:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TGWAttachmentProduction
+      TransitGatewayRouteTableId: !Ref TGWRouteTable
+
+  TGWRouteTablePropagationB:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TGWAttachmentDevTest
+      TransitGatewayRouteTableId: !Ref TGWRouteTable
 
   # ROUTING CONFIGURATION
   # In production: Route tables would be managed within each account
@@ -304,7 +360,7 @@ Resources:
   ProductionInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0a627a85fdcfabbaa  # Amazon Linux 2023
+      ImageId: !Ref LatestAmiId
       InstanceType: t3.micro
       KeyName: !Ref KeyPairName
       SubnetId: !Ref ProdAppSubnet
@@ -313,20 +369,16 @@ Resources:
       PrivateIpAddress: 10.0.1.10
       Tags:
         - Key: Name
-          Value: Production-Test-Instance
+          Value: Workload-A-Instance
         - Key: Account-Role
-          Value: Production
+          Value: Workload-A
         - Key: Environment
-          Value: Production
-        - Key: Backup-Required
-          Value: 'true'
-        - Key: Monitoring-Level
-          Value: Enhanced
+          Value: !Ref Environment
 
   DevTestInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0a627a85fdcfabbaa  # Amazon Linux 2023
+      ImageId: !Ref LatestAmiId
       InstanceType: t3.micro
       KeyName: !Ref KeyPairName
       SubnetId: !Ref DevTestAppSubnet
@@ -335,47 +387,43 @@ Resources:
       PrivateIpAddress: 10.1.1.10
       Tags:
         - Key: Name
-          Value: DevTest-Instance
+          Value: Workload-B-Instance
         - Key: Account-Role
-          Value: DevTest
+          Value: Workload-B
         - Key: Environment
-          Value: Development
-        - Key: Auto-Shutdown
-          Value: 'true'
-        - Key: Cost-Center
-          Value: Development
+          Value: !Ref Environment
 
 Outputs:
-  # Infrastructure Account Outputs
+  # Management Account Outputs
   TransitGatewayId:
-    Description: 'Transit Gateway ID (Infrastructure Account)'
+    Description: 'Transit Gateway ID (Management Account)'
     Value: !Ref TransitGateway
     Export:
       Name: !Sub '${AWS::StackName}-TGW-ID'
   
-  # Production Account Outputs
-  ProductionVPCId:
-    Description: 'Production VPC ID'
+  # Workload Account A Outputs
+  WorkloadAVPCId:
+    Description: 'Workload Account A VPC ID'
     Value: !Ref VPCProduction
     Export:
-      Name: !Sub '${AWS::StackName}-Prod-VPC-ID'
+      Name: !Sub '${AWS::StackName}-WorkloadA-VPC-ID'
     
-  ProductionInstanceIP:
-    Description: 'Production Instance Private IP'
+  WorkloadAInstanceIP:
+    Description: 'Workload A Instance Private IP'
     Value: !GetAtt ProductionInstance.PrivateIp
     
-  # Dev/Test Account Outputs  
-  DevTestVPCId:
-    Description: 'Dev/Test VPC ID'
+  # Workload Account B Outputs  
+  WorkloadBVPCId:
+    Description: 'Workload Account B VPC ID'
     Value: !Ref VPCDevTest
     Export:
-      Name: !Sub '${AWS::StackName}-DevTest-VPC-ID'
+      Name: !Sub '${AWS::StackName}-WorkloadB-VPC-ID'
     
-  DevTestInstanceIP:
-    Description: 'Dev/Test Instance Private IP'
+  WorkloadBInstanceIP:
+    Description: 'Workload B Instance Private IP'
     Value: !GetAtt DevTestInstance.PrivateIp
 
   # Multi-Account Architecture Summary
   ArchitectureNotes:
     Description: 'Multi-Account Architecture Implementation Notes'
-    Value: 'This template simulates a 4-account architecture: Management (billing/governance), Infrastructure (TGW/shared services), Production (10.0.0.0/16), and Dev/Test (10.1.0.0/16). In production, deploy across separate accounts using RAM sharing for TGW.'
+    Value: 'This template simulates a 3-account architecture: Management (TGW + RAM sharing), Workload A (10.0.0.0/16), and Workload B (10.1.0.0/16). In production, deploy across separate accounts with TGW shared via RAM.'

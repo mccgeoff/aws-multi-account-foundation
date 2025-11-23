@@ -2,6 +2,14 @@
 
 This demo showcases AWS multi-account architecture patterns using Transit Gateway for cross-account connectivity. While deployed in a single account for simplicity, it demonstrates the networking and security patterns used in production multi-account environments.
 
+## Problem Statement
+
+AWS Transit Gateway documentation is primarily written for single-account scenarios, but 67% of AWS customers use multi-account architectures. This creates a gap between how networking concepts are documented and how customers actually deploy them.
+
+As one AWS Solutions Architect noted: *"All of the customers I talk to are multi-account and this can help reduce the burden on me and my peers by removing ambiguity that we must disambiguate through 1:1 engagements."*
+
+This demo bridges that gap by showing how Transit Gateway concepts translate to multi-account patterns.
+
 ## Multi-Account Architecture Overview
 
 ![Multi-Account TGW Architecture](tgw-arch4.drawio.png)
