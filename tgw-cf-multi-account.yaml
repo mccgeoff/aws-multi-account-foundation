@@ -32,6 +32,8 @@ Resources:
     Properties:
       AmazonSideAsn: 64512
       Description: 'Multi-Account Transit Gateway - Management Account'
+      DefaultRouteTableAssociation: disable
+      DefaultRouteTablePropagation: disable
       Tags:
         - Key: Name
           Value: MultiAccount-TGW

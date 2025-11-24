@@ -1,12 +1,12 @@
-# Multi-Account Transit Gateway Demo
+# Multi-Account Transit Gateway Demo (Single-Account Simulation)
 
-This demo showcases AWS multi-account architecture patterns using Transit Gateway for cross-account connectivity. While deployed in a single account for simplicity, it demonstrates the networking and security patterns used in production multi-account environments.
+> **Demo Structure**: This is deployed in a single AWS account using tagging to simulate multi-account patterns. It demonstrates Transit Gateway networking concepts for production multi-account environments. For complete multi-account guidance, see the [AWS Multi-Account Architecture whitepaper](https://docs.aws.amazon.com/whitepapers/latest/organizing-your-aws-environment/organizing-your-aws-environment.html).
 
 ## Problem Statement
 
-AWS Transit Gateway documentation is primarily written for single-account scenarios, but 67% of AWS customers use multi-account architectures. This creates a gap between how networking concepts are documented and how customers actually deploy them.
+AWS Transit Gateway documentation is primarily written for single-account scenarios, but multi-account architectures are common. This creates a gap between how networking concepts are documented and how customers actually deploy them.
 
-As one AWS Solutions Architect noted: *"All of the customers I talk to are multi-account and this can help reduce the burden on me and my peers by removing ambiguity that we must disambiguate through 1:1 engagements."*
+I verified this finding with a senior AWS Solutions Architect and he noted: *"All of the customers I talk to are multi-account and this can help reduce the burden on me and my peers by removing ambiguity that we must disambiguate through 1:1 engagements."*
 
 This demo bridges that gap by showing how Transit Gateway concepts translate to multi-account patterns.
 
@@ -16,17 +16,12 @@ This demo bridges that gap by showing how Transit Gateway concepts translate to 
 
 The architecture demonstrates Transit Gateway enabling cross-account VPC connectivity within a single region, with the TGW shared from the Management Account via Resource Access Manager (RAM) to workload accounts.
 
-*Note: Security Account (222222222222) exists in complete enterprise setup but typically hosts compliance/monitoring services rather than workload VPCs, so it's not shown in this TGW connectivity demonstration.*
-
-> **Production Note**: In production environments, route tables would isolate prod/dev environments - both would connect to shared services rather than directly to each other. This demo shows the technical connectivity capability while maintaining proper security boundaries through route table design.
-
 ## Architecture Benefits Demonstrated
 
 ### 1. **Account Isolation**
-- **Management Account**: AWS Organizations, billing, and infrastructure services (TGW)
-- **Workload Account A (10.0.0.0/16)**: Application and database resources
-- **Workload Account B (10.1.0.0/16)**: Application and database resources  
-- **Security Account**: Centralized logging and monitoring (not shown in TGW demo)
+- **Management account**: AWS Organizations, billing, and infrastructure services (TGW)
+- **Workload account A (10.0.0.0/16)**: Application and database resources
+- **Workload account B (10.1.0.0/16)**: Application and database resources
 
 ### 2. **Network Segmentation**
 - Separate CIDR blocks prevent IP conflicts
@@ -45,7 +40,8 @@ The `tgw-cf-multi-account.yaml` template in this repository demonstrates the com
 ## Prerequisites
 
 - AWS CLI configured with appropriate permissions
-- EC2 key pair for instance access
+- EC2 key pair for instance access (you can get existing key pairs with `aws ec2 describe-key-pairs`)
+- Available VPC capacity (creates 2 VPCs - default limit is 5 per region)
 - Understanding of multi-account networking concepts
 
 ## Deployment
@@ -57,7 +53,8 @@ aws cloudformation create-stack \
   --stack-name multi-account-tgw-demo \
   --template-body file://tgw-cf-multi-account.yaml \
   --parameters ParameterKey=KeyPairName,ParameterValue=your-key-pair \
-  --capabilities CAPABILITY_IAM
+  --capabilities CAPABILITY_IAM \
+  --region us-east-2
 ```
 
 Monitor deployment:
@@ -69,7 +66,7 @@ aws cloudformation describe-stacks \
 
 ## Testing Cross-Account Connectivity
 
-### 1. VPC Reachability Analyzer Test
+### 1. VPC Reachability Analyzer Test (Console)
 - **Source**: Workload-A-Instance (10.0.1.10)
 - **Destination**: Workload-B-Instance (10.1.1.10)
 - **Expected Result**: Reachable via Transit Gateway
