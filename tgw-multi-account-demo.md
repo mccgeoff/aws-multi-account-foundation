@@ -18,6 +18,10 @@ The architecture demonstrates Transit Gateway enabling cross-account VPC connect
 
 ## Architecture benefits demonstrated
 
+This demo aligns with AWS Well-Architected Framework best practices:
+- **SEC01-BP01** (Security Pillar): "Separate workloads using accounts" - demonstrating secure connectivity between isolated AWS accounts while maintaining proper security boundaries
+- **OPS01-BP01** (Operational Excellence Pillar): "Perform operations as code" - implementing infrastructure as code with CloudFormation for repeatable, version-controlled deployments
+
 ### 1. **Account isolation**
 - **Management account**: AWS Organizations, billing, and infrastructure services (TGW)
 - **Workload account A (10.0.0.0/16)**: Application and database resources
