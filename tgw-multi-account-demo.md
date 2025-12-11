@@ -1,8 +1,8 @@
-# Multi-Account Transit Gateway Demo (Single-Account Simulation)
+# Multi-account Transit Gateway demo (single-account simulation)
 
 > **Demo Structure**: This is deployed in a single AWS account using tagging to simulate multi-account patterns. It demonstrates Transit Gateway networking concepts for production multi-account environments. For complete multi-account guidance, see the [AWS Multi-Account Architecture whitepaper](https://docs.aws.amazon.com/whitepapers/latest/organizing-your-aws-environment/organizing-your-aws-environment.html).
 
-## Problem Statement
+## Problem statement
 
 AWS Transit Gateway documentation is primarily written for single-account scenarios, but multi-account architectures are common. This creates a gap between how networking concepts are documented and how customers actually deploy them.
 
@@ -10,28 +10,28 @@ I verified this finding with a senior AWS Solutions Architect and he noted: *"Al
 
 This demo bridges that gap by showing how Transit Gateway concepts translate to multi-account patterns.
 
-## Multi-Account Architecture Overview
+## Multi-account architecture overview
 
 ![Multi-Account TGW Architecture](tgw-arch4.drawio.png)
 
 The architecture demonstrates Transit Gateway enabling cross-account VPC connectivity within a single region, with the TGW shared from the Management Account via Resource Access Manager (RAM) to workload accounts.
 
-## Architecture Benefits Demonstrated
+## Architecture benefits demonstrated
 
-### 1. **Account Isolation**
+### 1. **Account isolation**
 - **Management account**: AWS Organizations, billing, and infrastructure services (TGW)
 - **Workload account A (10.0.0.0/16)**: Application and database resources
 - **Workload account B (10.1.0.0/16)**: Application and database resources
 
-### 2. **Network Segmentation**
+### 2. **Network segmentation**
 - Separate CIDR blocks prevent IP conflicts
 - Cross-account routing through Transit Gateway
 - Security groups enforce different access patterns per environment
 
-### 3. **RAM Sharing Prerequisite**
+### 3. **RAM sharing prerequisite**
 The Transit Gateway must be shared from the Management Account to Workload Accounts via Resource Access Manager before VPC attachments can be created. This enables cross-account connectivity while maintaining centralized TGW management.
 
-## Real-World Implementation
+## Real-world implementation
 
 In a production multi-account setup, this architecture would be deployed using separate CloudFormation templates for each account, with the Management Account creating and sharing the Transit Gateway via RAM, and workload accounts accepting the share to create VPC attachments.
 
@@ -64,18 +64,18 @@ aws cloudformation describe-stacks \
   --query 'Stacks[0].StackStatus'
 ```
 
-## Testing Cross-Account Connectivity
+## Testing cross-account connectivity
 
-### 1. VPC Reachability Analyzer Test (Console)
+### 1. VPC reachability analyzer test (console)
 - **Source**: Workload-A-Instance (10.0.1.10)
 - **Destination**: Workload-B-Instance (10.1.1.10)
 - **Expected Result**: Reachable via Transit Gateway
 
-### 2. Security Group Validation
+### 2. Security group validation
 - Workload A instance has restrictive access (only from Workload B CIDR)
 - Workload B instance demonstrates different access patterns
 
-### 3. Cross-Account Route Verification
+### 3. Cross-account route verification
 ```bash
 # Check route tables show cross-account routes
 aws ec2 describe-route-tables \
@@ -89,7 +89,7 @@ aws ec2 describe-route-tables \
 aws cloudformation delete-stack --stack-name multi-account-tgw-demo
 ```
 
-## Next Steps
+## Next steps
 
 To implement this as a true multi-account architecture:
 
